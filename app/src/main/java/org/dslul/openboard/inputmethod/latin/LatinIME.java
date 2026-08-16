@@ -889,12 +889,15 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                             frameParams.height = kbHeight;
                             mSingleFrame.setLayoutParams(frameParams);
                         }
-                        // 显式给覆盖层建 LayoutParams：inflater 用 attachToRoot=false 时
-                        // getLayoutParams() 为 null，上面 if 会跳过设高度，导致覆盖层高度塌成 0 不可见。
-                        // 这里直接 new 参数并指定高度=键盘实测高，保证覆盖层一定显示出来。
+                        // 覆盖层直接 MATCH_PARENT 填满 mSingleFrame：mSingleFrame 最终高度由系统按
+                        // 键盘内容撑开（键盘高），覆盖层跟着等于键盘高，严丝合缝盖住键盘、不挡网页。
+                        // 不依赖 kbHeight 数值，避免监听测到 0 时覆盖层塌成不可见。
                         mSingleKeyContainer.setLayoutParams(
                                 new FrameLayout.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT));
+                        // 强制把覆盖层置顶，避免被底层 keyboardView 绘制层级盖住导致看不到
+                        mSingleKeyContainer.bringToFront();
                         // 只需对齐一次，移除监听避免重复触发
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
                             keyboardView.getViewTreeObserver()
@@ -909,6 +912,10 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                 + (mSingleKeyContainer == null ? "null" : "ok")
                 + " text=" + (mSingleKeyText == null ? "null" : "ok"));
         refreshSingleKey();
+        // 双保险：返回前再强制把覆盖层置顶，确保盖在键盘之上
+        if (mSingleKeyContainer != null) {
+            mSingleKeyContainer.bringToFront();
+        }
         return mSingleFrame;
     }
 
