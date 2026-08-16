@@ -44,6 +44,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.view.Window;
@@ -854,12 +855,13 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                 mKeyboardSwitcher.onCreateInputView(mIsHardwareAcceleratedDrawingEnabled);
         logToFile("onCreateInputView: keyboardView=" + (keyboardView == null ? "null" : "ok"));
 
-        // 卧底输入法：在键盘之上叠加一个占满全屏的单键覆盖层。
-        // 不打乱键盘原有结构与尺寸，仅作为透明点击层使用。
+        // 卧底输入法：在键盘之上叠加一个单键覆盖层。
+        // 覆盖层高度对齐原键盘实测高度，只占键盘那一片，不向网页方向延伸。
         final LayoutInflater inflater = getLayoutInflater();
         mSingleFrame = new FrameLayout(this);
+        // 宽度撑满，高度先按 WRAP_CONTENT，实际高度由下方监听填原键盘实测值
         mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         // 键盘作为底层
         mSingleFrame.addView(keyboardView);
         // 单键覆盖层作为上层
@@ -873,6 +875,36 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             }
         });
         mSingleFrame.addView(mSingleKeyContainer);
+        // 卧底输入法：键盘布局完成后，把覆盖层高度对齐原键盘实测高度，严丝合缝盖住键盘、不挡网页
+        keyboardView.getViewTreeObserver().addOnGlobalLayoutListener(
+                new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        final int kbHeight = keyboardView.getHeight();
+                        if (kbHeight <= 0) {
+                            return;
+                        }
+                        final ViewGroup.LayoutParams frameParams = mSingleFrame.getLayoutParams();
+                        if (frameParams != null) {
+                            frameParams.height = kbHeight;
+                            mSingleFrame.setLayoutParams(frameParams);
+                        }
+                        final ViewGroup.LayoutParams containerParams =
+                                mSingleKeyContainer.getLayoutParams();
+                        if (containerParams != null) {
+                            containerParams.height = kbHeight;
+                            mSingleKeyContainer.setLayoutParams(containerParams);
+                        }
+                        // 只需对齐一次，移除监听避免重复触发
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                            keyboardView.getViewTreeObserver()
+                                    .removeOnGlobalLayoutListener(this);
+                        } else {
+                            keyboardView.getViewTreeObserver()
+                                    .removeGlobalOnLayoutListener(this);
+                        }
+                    }
+                });
         logToFile("onCreateInputView: 单键层已叠加, container="
                 + (mSingleKeyContainer == null ? "null" : "ok")
                 + " text=" + (mSingleKeyText == null ? "null" : "ok"));
