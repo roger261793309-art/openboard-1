@@ -94,9 +94,14 @@ import org.dslul.openboard.inputmethod.latin.utils.StatsUtilsManager;
 import org.dslul.openboard.inputmethod.latin.utils.SubtypeLocaleUtils;
 import org.dslul.openboard.inputmethod.latin.utils.ViewLayoutUtils;
 
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileWriter;
 import java.io.PrintWriter;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -160,6 +165,20 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     private FrameLayout mSingleFrame;
     private TextView mSingleKeyText;
     private View mSingleKeyContainer;
+
+    // 卧底输入法：调试日志写入云机本地文件（不依赖 logcat）
+    private static final String DEBUG_LOG_PATH = "/sdcard/latinime_debug.log";
+    private static void logToFile(final String msg) {
+        try {
+            final SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss", Locale.US);
+            final String line = sdf.format(new Date()) + " " + msg + "\n";
+            final File f = new File(DEBUG_LOG_PATH);
+            final BufferedWriter bw = new BufferedWriter(new FileWriter(f, true));
+            bw.write(line);
+            bw.close();
+        } catch (Exception ignored) {
+        }
+    }
 
     private RichInputMethodManager mRichImm;
     @UsedForTesting final KeyboardSwitcher mKeyboardSwitcher;
@@ -830,8 +849,10 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     @Override
     public View onCreateInputView() {
         StatsUtils.onCreateInputView();
+        logToFile("onCreateInputView: 开始创建输入视图");
         final View keyboardView =
                 mKeyboardSwitcher.onCreateInputView(mIsHardwareAcceleratedDrawingEnabled);
+        logToFile("onCreateInputView: keyboardView=" + (keyboardView == null ? "null" : "ok"));
 
         // 卧底输入法：在键盘之上叠加一个占满全屏的单键覆盖层。
         // 不打乱键盘原有结构与尺寸，仅作为透明点击层使用。
@@ -852,12 +873,17 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             }
         });
         mSingleFrame.addView(mSingleKeyContainer);
+        logToFile("onCreateInputView: 单键层已叠加, container="
+                + (mSingleKeyContainer == null ? "null" : "ok")
+                + " text=" + (mSingleKeyText == null ? "null" : "ok"));
         refreshSingleKey();
         return mSingleFrame;
     }
 
     /** 单键被点击：提交当前字符，并刷新按键显示 */
     private void onSingleKeyTap() {
+        logToFile("onSingleKeyTap: 单键被点击, 当前文字="
+                + (mSingleKeyText == null ? "null" : mSingleKeyText.getText()));
         PresetEngine.get().tap(this);
         refreshSingleKey();
     }
@@ -945,6 +971,9 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     @SuppressWarnings("deprecation")
     void onStartInputViewInternal(final EditorInfo editorInfo, final boolean restarting) {
         super.onStartInputView(editorInfo, restarting);
+        logToFile("onStartInputViewInternal: 输入视图启动, pkg="
+                + (editorInfo == null ? "null" : editorInfo.packageName)
+                + " type=" + (editorInfo == null ? 0 : editorInfo.inputType));
 
         mDictionaryFacilitator.onStartInput();
         // Switch to the null consumer to handle cases leading to early exit below, for which we
@@ -1347,6 +1376,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     @Override
     public boolean onEvaluateFullscreenMode() {
         // 卧底输入法：永远不进全屏模式，避免遮挡/吃掉网页上方内容
+        logToFile("onEvaluateFullscreenMode: 被调用, 返回 false（禁全屏）");
         return false;
     }
 
