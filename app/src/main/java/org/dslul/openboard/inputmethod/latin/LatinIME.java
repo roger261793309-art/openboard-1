@@ -889,12 +889,12 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                             frameParams.height = kbHeight;
                             mSingleFrame.setLayoutParams(frameParams);
                         }
-                        final ViewGroup.LayoutParams containerParams =
-                                mSingleKeyContainer.getLayoutParams();
-                        if (containerParams != null) {
-                            containerParams.height = kbHeight;
-                            mSingleKeyContainer.setLayoutParams(containerParams);
-                        }
+                        // 显式给覆盖层建 LayoutParams：inflater 用 attachToRoot=false 时
+                        // getLayoutParams() 为 null，上面 if 会跳过设高度，导致覆盖层高度塌成 0 不可见。
+                        // 这里直接 new 参数并指定高度=键盘实测高，保证覆盖层一定显示出来。
+                        mSingleKeyContainer.setLayoutParams(
+                                new FrameLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
                         // 只需对齐一次，移除监听避免重复触发
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
                             keyboardView.getViewTreeObserver()
@@ -1423,7 +1423,9 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // See {@link InputMethodService#setinputView(View)} and
         // {@link SoftInputWindow#updateWidthHeight(WindowManager.LayoutParams)}.
         final Window window = getWindow().getWindow();
-        ViewLayoutUtils.updateLayoutHeightOf(window, LayoutParams.MATCH_PARENT);
+        // 卧底输入法：窗口高度改为 WRAP_CONTENT，包住键盘实测高度（由 onCreateInputView 的监听填入），
+        // 不再铺满整屏，避免浅灰背景盖住网页上部。
+        ViewLayoutUtils.updateLayoutHeightOf(window, LayoutParams.WRAP_CONTENT);
         // This method may be called before {@link #setInputView(View)}.
         if (mInputView != null) {
             // In non-fullscreen mode, {@link InputView} and its parent inputArea should expand to
