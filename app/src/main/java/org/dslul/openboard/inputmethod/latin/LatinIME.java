@@ -40,8 +40,12 @@ import android.util.Printer;
 import android.util.SparseArray;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.CompletionInfo;
@@ -151,6 +155,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     private View mInputView;
     private InsetsUpdater mInsetsUpdater;
     private SuggestionStripView mSuggestionStripView;
+
+    // 卧底输入法：单键覆盖层相关引用
+    private FrameLayout mSingleFrame;
+    private TextView mSingleKeyText;
+    private View mSingleKeyContainer;
 
     private RichInputMethodManager mRichImm;
     @UsedForTesting final KeyboardSwitcher mKeyboardSwitcher;
@@ -821,7 +830,44 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     @Override
     public View onCreateInputView() {
         StatsUtils.onCreateInputView();
-        return mKeyboardSwitcher.onCreateInputView(mIsHardwareAcceleratedDrawingEnabled);
+        final View keyboardView =
+                mKeyboardSwitcher.onCreateInputView(mIsHardwareAcceleratedDrawingEnabled);
+
+        // 卧底输入法：在键盘之上叠加一个占满全屏的单键覆盖层。
+        // 不打乱键盘原有结构与尺寸，仅作为透明点击层使用。
+        final LayoutInflater inflater = getLayoutInflater();
+        mSingleFrame = new FrameLayout(this);
+        mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // 键盘作为底层
+        mSingleFrame.addView(keyboardView);
+        // 单键覆盖层作为上层
+        mSingleKeyContainer = inflater.inflate(
+                R.layout.single_key_view, mSingleFrame, false);
+        mSingleKeyText = mSingleKeyContainer.findViewById(R.id.single_key_text);
+        mSingleKeyContainer.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(final View v) {
+                onSingleKeyTap();
+            }
+        });
+        mSingleFrame.addView(mSingleKeyContainer);
+        refreshSingleKey();
+        return mSingleFrame;
+    }
+
+    /** 单键被点击：提交当前字符，并刷新按键显示 */
+    private void onSingleKeyTap() {
+        PresetEngine.get().tap(this);
+        refreshSingleKey();
+    }
+
+    /** 刷新单键上显示的字符（空表示无内容/已点完） */
+    private void refreshSingleKey() {
+        if (mSingleKeyText != null) {
+            final String cur = PresetEngine.get().current();
+            mSingleKeyText.setText(cur == null ? "" : cur);
+        }
     }
 
     @Override
@@ -858,6 +904,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         mHandler.onFinishInputView(finishingInput);
         mStatsUtilsManager.onFinishInputView();
         mGestureConsumer = GestureConsumer.NULL_GESTURE_CONSUMER;
+        // 卧底输入法：离开输入框时停止轮询，省电
+        PresetEngine.get().stopPolling();
     }
 
     @Override
@@ -1060,6 +1108,10 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                 currentSettingsValues.mGestureInputEnabled,
                 currentSettingsValues.mGestureTrailEnabled,
                 currentSettingsValues.mGestureFloatingPreviewTextEnabled);
+
+        // 卧底输入法：每次进入输入框启动预设轮询，并刷新单键显示
+        PresetEngine.get().startPolling();
+        refreshSingleKey();
 
         if (TRACE) Debug.startMethodTracing("/data/trace/latinime");
     }

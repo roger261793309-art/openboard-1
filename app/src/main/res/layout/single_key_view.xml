@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  单键覆盖层（卧底输入法 UI）
+  占满整个输入区域，只显示当前要输入的字符。
+  不改键盘尺寸、不改原配色，沿用 OpenBoard 浅色主题。
+  背景用 key_background_lxx_light (#ECEFF1)，文字用深色，与原键盘一致。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/single_key_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/keyboard_background_lxx_light_border">
+
+    <TextView
+        android:id="@+id/single_key_text"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:textSize="48sp"
+        android:textColor="#21272B"
+        android:background="@color/key_background_lxx_light"
+        android:text="" />
+
+</FrameLayout>
