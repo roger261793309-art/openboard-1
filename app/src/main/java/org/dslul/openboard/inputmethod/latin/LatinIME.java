@@ -863,9 +863,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // 覆盖层高度对齐原键盘实测高度，只占键盘那一片，不向网页方向延伸。
         final LayoutInflater inflater = getLayoutInflater();
         mSingleFrame = new FrameLayout(this);
-        // 宽度撑满，高度先按 WRAP_CONTENT，实际高度由下方监听填原键盘实测值
+        // 宽度撑满，高度 MATCH_PARENT：在 WRAP_CONTENT 的窗口里，MATCH_PARENT 会参考窗口高度
+        // （窗口高度由系统按键盘内容撑开），键盘和覆盖层都填满它。
+        // 注意：不能用 WRAP_CONTENT，否则内部 keyboardView(make_parent) 与覆盖层都会塌成 0 不可见。
         mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         // 键盘作为底层
         mSingleFrame.addView(keyboardView);
         // 单键覆盖层作为上层
@@ -888,14 +890,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                         if (kbHeight <= 0) {
                             return;
                         }
-                        final ViewGroup.LayoutParams frameParams = mSingleFrame.getLayoutParams();
-                        if (frameParams != null) {
-                            frameParams.height = kbHeight;
-                            mSingleFrame.setLayoutParams(frameParams);
-                        }
-                        // 覆盖层直接 MATCH_PARENT 填满 mSingleFrame：mSingleFrame 最终高度由系统按
-                        // 键盘内容撑开（键盘高），覆盖层跟着等于键盘高，严丝合缝盖住键盘、不挡网页。
-                        // 不依赖 kbHeight 数值，避免监听测到 0 时覆盖层塌成不可见。
+                        // mSingleFrame 已是 MATCH_PARENT，无需再手动设高度。
+                        // 覆盖层直接 MATCH_PARENT 填满 mSingleFrame（=键盘高），严丝合缝盖住键盘、不挡网页。
                         mSingleKeyContainer.setLayoutParams(
                                 new FrameLayout.LayoutParams(
                                         ViewGroup.LayoutParams.MATCH_PARENT,
