@@ -691,6 +691,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         registerReceiver(mRestartAfterDeviceUnlockReceiver, restartAfterUnlockFilter);
 
         StatsUtils.onCreate(mSettings.getCurrent(), mRichImm);
+
+        // 卧底输入法：启动双向通讯 socket（端口 8888，adb reverse 映射到本机）。
+        // 放在 onCreate：输入法进程常驻即生效，不依赖点输入框。
+        PresetEngine.get().attachService(this);
+        SocketServer.get().start();
     }
 
     // Has to be package-visible for unit tests
@@ -928,7 +933,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             final String cur = PresetEngine.get().current();
             // 预设为空时显示提示文案，而不是空白
             mSingleKeyText.setText(cur == null || cur.isEmpty()
-                    ? "未传入内容\n输入内容传入 ime_in.txt 文件" : cur);
+                    ? "未传入内容\n通过本机 socket 传入预输入内容" : cur);
         }
     }
 
@@ -1179,6 +1184,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
 
         // 卧底输入法：每次进入输入框启动预设轮询，并刷新单键显示
         PresetEngine.get().startPolling();
+        // 输入框激活时：若之前收到过预输入内容且还没自清，先清掉旧残留
+        PresetEngine.get().onInputViewShown();
         refreshSingleKey();
 
         if (TRACE) Debug.startMethodTracing("/data/trace/latinime");
