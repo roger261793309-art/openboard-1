@@ -102,8 +102,9 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
 
     private boolean updateKeyboardThemeAndContextThemeWrapper(final Context context,
             final KeyboardTheme keyboardTheme) {
-        final boolean nightModeChanged = (mCurrentUiMode & Configuration.UI_MODE_NIGHT_MASK)
-                != (context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK);
+        // 卧底输入法：禁用 nightMode 检测，系统明暗变化不再触发主题重设，避免覆盖层被顶掉。
+        // 固定使用 DEFAULT_THEME_ID（暗色），不自动跟随系统切换。
+        final boolean nightModeChanged = false;
         if (mThemeContext == null || !keyboardTheme.equals(mKeyboardTheme) || nightModeChanged) {
             mKeyboardTheme = keyboardTheme;
             mThemeContext = new ContextThemeWrapper(context, keyboardTheme.mStyleId);

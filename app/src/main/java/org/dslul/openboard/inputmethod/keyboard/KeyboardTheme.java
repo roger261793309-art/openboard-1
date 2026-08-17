@@ -66,7 +66,7 @@ public final class KeyboardTheme implements Comparable<KeyboardTheme> {
     public static final int THEME_ID_LXX_DARK = 7;
     public static final int THEME_ID_LXX_AUTO = 9;
     public static final int THEME_ID_LXX_AUTO_BORDER = 8;
-    public static final int DEFAULT_THEME_ID = THEME_ID_LXX_DARK_BORDER;
+    public static final int DEFAULT_THEME_ID = THEME_ID_LXX_DARK;
 
     private static KeyboardTheme[] AVAILABLE_KEYBOARD_THEMES;
 

@@ -842,8 +842,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                 cleanupInternalStateForFinishInput();
             }
         }
-        // KeyboardSwitcher will check by itself if theme update is necessary
-        mKeyboardSwitcher.updateKeyboardTheme();
+        // 卧底输入法：禁止 updateKeyboardTheme()，避免旋屏时把覆盖层顶掉
+        // mKeyboardSwitcher.updateKeyboardTheme();
         super.onConfigurationChanged(conf);
     }
 
@@ -863,11 +863,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // 覆盖层高度对齐原键盘实测高度，只占键盘那一片，不向网页方向延伸。
         final LayoutInflater inflater = getLayoutInflater();
         mSingleFrame = new FrameLayout(this);
-        // 宽度撑满，高度 MATCH_PARENT：在 WRAP_CONTENT 的窗口里，MATCH_PARENT 会参考窗口高度
-        // （窗口高度由系统按键盘内容撑开），键盘和覆盖层都填满它。
-        // 注意：不能用 WRAP_CONTENT，否则内部 keyboardView(make_parent) 与覆盖层都会塌成 0 不可见。
+        // 宽度撑满；高度先 WRAP_CONTENT，让窗口以键盘内容为准测量，
+        // 真正高度由下面监听里抄 keyboardView 实测高度钉死（避免 MATCH_PARENT 在
+        // WRAP_CONTENT 窗口里形成循环依赖塌 0）。
         mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         // 键盘作为底层
         mSingleFrame.addView(keyboardView);
         // 单键覆盖层作为上层
@@ -886,16 +886,18 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                 new ViewTreeObserver.OnGlobalLayoutListener() {
                     @Override
                     public void onGlobalLayout() {
+                        // 卧底输入法：抄键盘 view 的实测高度，把 mSingleFrame 和覆盖层
+                        // 都钉成这个像素高度。宽高、位置完全跟随英文键盘 view，
+                        // 不会跑到屏幕外，也不会跟键盘错位。
                         final int kbHeight = keyboardView.getHeight();
                         if (kbHeight <= 0) {
-                            return;
+                            return; // 键盘还没测出高度，等下次布局再试
                         }
-                        // mSingleFrame 已是 MATCH_PARENT，无需再手动设高度。
-                        // 覆盖层直接 MATCH_PARENT 填满 mSingleFrame（=键盘高），严丝合缝盖住键盘、不挡网页。
+                        mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
                         mSingleKeyContainer.setLayoutParams(
                                 new FrameLayout.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT,
-                                        ViewGroup.LayoutParams.MATCH_PARENT));
+                                        ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
                         // 强制把覆盖层置顶，避免被底层 keyboardView 绘制层级盖住导致看不到
                         mSingleKeyContainer.bringToFront();
                         // 只需对齐一次，移除监听避免重复触发
@@ -931,7 +933,9 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     private void refreshSingleKey() {
         if (mSingleKeyText != null) {
             final String cur = PresetEngine.get().current();
-            mSingleKeyText.setText(cur == null ? "" : cur);
+            // 预设为空时显示提示文案，而不是空白
+            mSingleKeyText.setText(cur == null || cur.isEmpty()
+                    ? "未传入内容\n输入内容传入 ime_in.txt 文件" : cur);
         }
     }
 
@@ -1020,7 +1024,10 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         mGestureConsumer = GestureConsumer.NULL_GESTURE_CONSUMER;
         mRichImm.refreshSubtypeCaches();
         final KeyboardSwitcher switcher = mKeyboardSwitcher;
-        switcher.updateKeyboardTheme();
+        // 卧底输入法：禁止 updateKeyboardTheme()。它会用纯键盘 view 重设 setInputView，
+        // 把 mSingleFrame 覆盖层顶掉，导致只看到英文键盘、没有单键覆盖层。
+        // 键盘 view 已由 onCreateInputView 直接创建（含覆盖层），这里不再重设。
+        // switcher.updateKeyboardTheme();
         final MainKeyboardView mainKeyboardView = switcher.getMainKeyboardView();
         // If we are starting input in a different text field from before, we'll have to reload
         // settings, so currentSettingsValues can't be final.
@@ -1441,12 +1448,12 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             // coexistent with {@link #mExtractedArea} above.
             // See {@link InputMethodService#setInputView(View) and
             // com.android.internal.R.layout.input_method.xml.
-            final int layoutHeight = isFullscreenMode()
-                    ? LayoutParams.WRAP_CONTENT : LayoutParams.MATCH_PARENT;
+            // 卧底输入法：强制 inputArea 与 mInputView 都 MATCH_PARENT，
+            // 确保 mSingleFrame（含覆盖层）撑满窗口、有高度可参考，覆盖层必然显示。
             final View inputArea = window.findViewById(android.R.id.inputArea);
-            ViewLayoutUtils.updateLayoutHeightOf(inputArea, layoutHeight);
+            ViewLayoutUtils.updateLayoutHeightOf(inputArea, LayoutParams.MATCH_PARENT);
             ViewLayoutUtils.updateLayoutGravityOf(inputArea, Gravity.BOTTOM);
-            ViewLayoutUtils.updateLayoutHeightOf(mInputView, layoutHeight);
+            ViewLayoutUtils.updateLayoutHeightOf(mInputView, LayoutParams.MATCH_PARENT);
         }
     }
 
