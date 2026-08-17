@@ -859,18 +859,18 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                 mKeyboardSwitcher.onCreateInputView(mIsHardwareAcceleratedDrawingEnabled);
         logToFile("onCreateInputView: keyboardView=" + (keyboardView == null ? "null" : "ok"));
 
-        // 卧底输入法：在键盘之上叠加一个单键覆盖层。
-        // 覆盖层高度对齐原键盘实测高度，只占键盘那一片，不向网页方向延伸。
+        // 卧底输入法：只保留单键覆盖层，彻底不要英文键盘层。
+        // 英文键盘层会和覆盖层抢点击、且高度测不准导致覆盖层只盖一条边；
+        // 删掉它后覆盖层独占窗口，点击 100% 落在覆盖层上，走系统 commitText 输入。
+        // 覆盖层高度对齐 mSingleFrame 自身真实高度（即窗口真实键盘高度）。
         final LayoutInflater inflater = getLayoutInflater();
         mSingleFrame = new FrameLayout(this);
-        // 宽度撑满；高度先 WRAP_CONTENT，让窗口以键盘内容为准测量，
-        // 真正高度由下面监听里抄 keyboardView 实测高度钉死（避免 MATCH_PARENT 在
+        // 宽度撑满；高度先 WRAP_CONTENT，让窗口以覆盖层内容为准测量，
+        // 真正高度由下面监听里抄 mSingleFrame 实测高度钉死（避免 MATCH_PARENT 在
         // WRAP_CONTENT 窗口里形成循环依赖塌 0）。
         mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        // 键盘作为底层
-        mSingleFrame.addView(keyboardView);
-        // 单键覆盖层作为上层
+        // 单键覆盖层作为唯一内容
         mSingleKeyContainer = inflater.inflate(
                 R.layout.single_key_view, mSingleFrame, false);
         mSingleKeyText = mSingleKeyContainer.findViewById(R.id.single_key_text);
@@ -881,33 +881,26 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             }
         });
         mSingleFrame.addView(mSingleKeyContainer);
-        // 卧底输入法：键盘布局完成后，把覆盖层高度对齐原键盘实测高度，严丝合缝盖住键盘、不挡网页
-        keyboardView.getViewTreeObserver().addOnGlobalLayoutListener(
+        // 卧底输入法：覆盖层布局完成后，把覆盖层高度对齐 mSingleFrame 自身实测高度
+        // （即窗口真实键盘高度），严丝合缝占满键盘区域、不挡网页。
+        mSingleFrame.getViewTreeObserver().addOnGlobalLayoutListener(
                 new ViewTreeObserver.OnGlobalLayoutListener() {
                     @Override
                     public void onGlobalLayout() {
-                        // 卧底输入法：抄键盘 view 的实测高度，把 mSingleFrame 和覆盖层
-                        // 都钉成这个像素高度。宽高、位置完全跟随英文键盘 view，
-                        // 不会跑到屏幕外，也不会跟键盘错位。
-                        final int kbHeight = keyboardView.getHeight();
+                        // 卧底输入法：抄 mSingleFrame 自身实测高度，把 mSingleFrame 和覆盖层
+                        // 都钉成这个像素高度。宽高、位置完全跟随输入法窗口，
+                        // 不会跑到屏幕外，也不会错位。
+                        final int kbHeight = mSingleFrame.getHeight();
                         if (kbHeight <= 0) {
-                            return; // 键盘还没测出高度，等下次布局再试
+                            return; // 窗口还没测出高度，等下次布局再试
                         }
                         mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
                         mSingleKeyContainer.setLayoutParams(
                                 new FrameLayout.LayoutParams(
                                         ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
-                        // 强制把覆盖层置顶，避免被底层 keyboardView 绘制层级盖住导致看不到
-                        mSingleKeyContainer.bringToFront();
-                        // 只需对齐一次，移除监听避免重复触发
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                            keyboardView.getViewTreeObserver()
-                                    .removeOnGlobalLayoutListener(this);
-                        } else {
-                            keyboardView.getViewTreeObserver()
-                                    .removeGlobalOnLayoutListener(this);
-                        }
+                        // 覆盖层是 mSingleFrame 唯一内容，无需置顶；保留监听，
+                        // 每次布局都重新对齐，防止重弹/旋屏后高度错位。
                     }
                 });
         logToFile("onCreateInputView: 单键层已叠加, container="
