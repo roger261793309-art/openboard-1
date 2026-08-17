@@ -9,7 +9,7 @@
     android:id="@+id/single_key_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/keyboard_background_lxx_dark">
+    android:background="@drawable/keyboard_background_lxx_dark">
 
     <TextView
         android:id="@+id/single_key_text"
