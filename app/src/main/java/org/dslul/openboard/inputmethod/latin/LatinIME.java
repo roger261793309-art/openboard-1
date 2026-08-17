@@ -851,6 +851,10 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     public View onCreateInputView() {
         StatsUtils.onCreateInputView();
         logToFile("onCreateInputView: 开始创建输入视图");
+        // 卧底输入法：不要调 mKeyboardSwitcher.updateKeyboardTheme()。
+        // 它的副作用是主题变化时用 KeyboardSwitcher.onCreateInputView()（纯键盘 input_view，
+        // 不含单键覆盖层）重新 setInputView，会把我们的 mSingleFrame 覆盖层替换掉，导致只剩英文键盘。
+        // 键盘 view 由下面这行直接创建，无需 updateKeyboardTheme 重设。
         final View keyboardView =
                 mKeyboardSwitcher.onCreateInputView(mIsHardwareAcceleratedDrawingEnabled);
         logToFile("onCreateInputView: keyboardView=" + (keyboardView == null ? "null" : "ok"));
