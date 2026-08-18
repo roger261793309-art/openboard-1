@@ -233,6 +233,16 @@ public final class PresetEngine {
                     // 刷新浮层显示当前进度（可选，纯视觉）
                     requestUiRefresh();
                     SocketServer.logEvent("[步骤] 注入字符 index=" + index + "/" + chars.size() + " 值=[" + c + "]");
+                    // 最后一个字提交完立即刹车，直接自检回完成/失败，不再约下一次提交
+                    if (index >= chars.size()) {
+                        InputConnection ic2 = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
+                        if (ic2 != null) {
+                            checkInput(ic2);
+                        } else {
+                            autoInjecting = false;
+                        }
+                        return;
+                    }
                     scheduleNextInject();
                 } catch (Exception e) {
                     // 注入中途 InputConnection 失效：静默清理内存、不炸进程。
