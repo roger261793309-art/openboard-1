@@ -377,7 +377,7 @@ public final class PresetEngine {
             return cs == null ? "" : cs.toString();
         } catch (Exception e) {
             // 连接失效时回读会抛异常，返回空串让调用方按"不一致"处理，避免炸进程
-            SocketServer.logEvent("readBeforeCursor 异常（连接可能失效），返回空串：" + e.getMessage());
+            SocketServer.logEvent("readBeforeCursor 抛异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
             return "";
         }
     }
@@ -394,7 +394,7 @@ public final class PresetEngine {
             ic.deleteSurroundingText(len, 0);
         } catch (Exception e) {
             // InputConnection 失效时调用会抛异常，静默忽略，避免炸进程
-            SocketServer.logEvent("clearInput 异常（连接可能失效），已忽略：" + e.getMessage());
+            SocketServer.logEvent("clearInput 抛异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
         }
     }
 

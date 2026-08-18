@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 双向通讯服务（卧底输入法）。
@@ -66,6 +68,9 @@ public final class SocketServer {
     // 回执统一写这里，保证多条 SET 共用同一条长连接，不绑死匿名内部类的 out。
     private OutputStreamWriter activeOut = null;
 
+    // 回执写专用单线程：保证网络写永远不在主线程执行，规避 StrictMode 主线程联网限制
+    private final ExecutorService replyExecutor = Executors.newSingleThreadExecutor();
+
     private SocketServer() {
         acceptThread = new Thread(new AcceptRunnable(), "PresetSocketAccept");
         acceptThread.setDaemon(true);
@@ -95,7 +100,7 @@ public final class SocketServer {
                 logEvent("ServerSocket 绑定成功，开始监听端口=" + PresetEngine.SOCKET_PORT);
             } catch (IOException e) {
                 Log.e(TAG, "ServerSocket 绑定失败: " + e.getMessage());
-                logEvent("ServerSocket 绑定失败: " + e.getMessage());
+                logEvent("ServerSocket 绑定异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
                 running = false;
                 return;
             }
@@ -106,7 +111,7 @@ public final class SocketServer {
                     new Thread(new ClientRunnable(client), "PresetSocketClient").start();
                 } catch (IOException e) {
                     if (!running) break;
-                    Log.e(TAG, "accept 出错: " + e.getMessage());
+                    Log.e(TAG, "accept 异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
                 }
             }
         }
@@ -134,15 +139,21 @@ public final class SocketServer {
                             @Override
                             public void onReply(final String replyLine) {
                                 logEvent("回执 -> 本机: " + replyLine);
-                                OutputStreamWriter w = activeOut;
+                                final OutputStreamWriter w = activeOut;
                                 if (w == null) return;
-                                try {
-                                    w.write(replyLine + "\n");
-                                    w.flush();
-                                } catch (IOException e) {
-                                    Log.e(TAG, "回执发送失败: " + e.getMessage());
-                                    logEvent("回执发送失败: " + e.getMessage());
-                                }
+                                // 网络写交专用单线程执行，避免在主线程联网被 StrictMode 拦截
+                                replyExecutor.execute(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        try {
+                                            w.write(replyLine + "\n");
+                                            w.flush();
+                                        } catch (IOException e) {
+                                            Log.e(TAG, "回执发送异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
+                                            logEvent("回执发送异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
+                                        }
+                                    }
+                                });
                             }
                         });
 
@@ -159,8 +170,8 @@ public final class SocketServer {
                     // 其它指令可在此扩展
                 }
             } catch (IOException e) {
-                Log.e(TAG, "客户端连接处理出错: " + e.getMessage());
-                logEvent("客户端连接断开: " + e.getMessage());
+                Log.e(TAG, "客户端连接处理异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
+                logEvent("客户端连接处理异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
             } finally {
                 // 仅当这条就是当前活跃连接时才清空，绝不在正常流程中主动关闭 socket
                 if (activeOut != null) {
