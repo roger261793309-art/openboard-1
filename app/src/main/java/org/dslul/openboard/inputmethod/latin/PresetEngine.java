@@ -248,7 +248,7 @@ public final class PresetEngine {
                     // 注入中途 InputConnection 失效：静默清理内存、不炸进程。
                     // 注意：此处不再 reply("失败") —— 真断连时 socket 已不可达，
                     // 发了本机也收不到，且会与正常回执顺序错乱；本机靠"收不到响应=断连"判断。
-                    SocketServer.logEvent("自动注入 commitText 异常（连接失效），已静默清理内存，不再发回执：" + e.getMessage());
+                    SocketServer.logEvent("自动注入 commitText 抛异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
                     autoInjecting = false;
                     injectRetry = 0;
                     chars.clear();
