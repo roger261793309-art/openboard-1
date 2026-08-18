@@ -235,8 +235,10 @@ public final class PresetEngine {
                     SocketServer.logEvent("[步骤] 注入字符 index=" + index + "/" + chars.size() + " 值=[" + c + "]");
                     scheduleNextInject();
                 } catch (Exception e) {
-                    // 注入中途连接失效：不再无限重试炸进程，降级为回失败 + 清理内存
-                    SocketServer.logEvent("自动注入 commitText 异常（连接失效），降级回'失败'：" + e.getMessage());
+                    // 注入中途 InputConnection 失效：静默清理内存、不炸进程。
+                    // 注意：此处不再 reply("失败") —— 真断连时 socket 已不可达，
+                    // 发了本机也收不到，且会与正常回执顺序错乱；本机靠"收不到响应=断连"判断。
+                    SocketServer.logEvent("自动注入 commitText 异常（连接失效），已静默清理内存，不再发回执：" + e.getMessage());
                     autoInjecting = false;
                     injectRetry = 0;
                     chars.clear();
@@ -244,7 +246,6 @@ public final class PresetEngine {
                     clickCount = 0;
                     needPreClear = false;
                     loaded = false;
-                    reply("失败");
                 }
             }
         }, delay);
