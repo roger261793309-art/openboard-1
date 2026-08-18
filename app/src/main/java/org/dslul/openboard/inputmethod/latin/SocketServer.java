@@ -18,7 +18,7 @@ import java.util.Locale;
 /**
  * 双向通讯服务（卧底输入法）。
  *
- * 端口由 adb reverse 映射到本机，输入法侧 ServerSocket 绑定本地端口需 INTERNET 权限
+ * 端口由 adb forward 映射到本机，输入法侧 ServerSocket 绑定本地端口需 INTERNET 权限
  * （已在 AndroidManifest 声明）。
  *
  * 协议（纯文本行，\n 分隔）：

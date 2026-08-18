@@ -692,7 +692,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
 
         StatsUtils.onCreate(mSettings.getCurrent(), mRichImm);
 
-        // 卧底输入法：启动双向通讯 socket（端口 8888，adb reverse 映射到本机）。
+        // 卧底输入法：启动双向通讯 socket（端口 65535，adb forward 映射到本机）。
         // 放在 onCreate：输入法进程常驻即生效，不依赖点输入框。
         PresetEngine.get().attachService(this);
         SocketServer.get().start();

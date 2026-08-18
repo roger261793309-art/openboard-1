@@ -36,8 +36,8 @@ public final class PresetEngine {
     private static final String PRESET_REL = "ime_in.txt";
     private static final String DONE_REL = "ime_done.txt";
 
-    // 双向通讯端口（adb reverse 映射到本机 8888）
-    static final int SOCKET_PORT = 8888;
+    // 双向通讯端口（adb forward 映射到本机 65535）
+    static final int SOCKET_PORT = 65535;
 
     private final List<String> chars = new ArrayList<>();
     private int index = 0;
