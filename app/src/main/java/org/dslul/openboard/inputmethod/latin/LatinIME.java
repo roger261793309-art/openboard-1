@@ -992,8 +992,6 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         mHandler.onFinishInputView(finishingInput);
         mStatsUtilsManager.onFinishInputView();
         mGestureConsumer = GestureConsumer.NULL_GESTURE_CONSUMER;
-        // 卧底输入法：离开输入框时停止轮询，省电
-        PresetEngine.get().stopPolling();
     }
 
     @Override
@@ -1203,8 +1201,6 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
                 currentSettingsValues.mGestureTrailEnabled,
                 currentSettingsValues.mGestureFloatingPreviewTextEnabled);
 
-        // 卧底输入法：每次进入输入框启动预设轮询，并刷新单键显示
-        PresetEngine.get().startPolling();
         // 输入框激活时：若之前收到过预输入内容且还没自清，先清掉旧残留
         PresetEngine.get().onInputViewShown();
         refreshSingleKey();
