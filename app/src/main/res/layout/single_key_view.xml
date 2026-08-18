@@ -21,7 +21,7 @@
         android:ellipsize="none"
         android:autoSizeTextType="uniform"
         android:autoSizeMinTextSize="12sp"
-        android:autoSizeMaxTextSize="64sp"
+        android:autoSizeMaxTextSize="14sp"
         android:autoSizeStepGranularity="1sp"
         android:text="" />
 

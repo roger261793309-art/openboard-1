@@ -62,6 +62,10 @@ public final class SocketServer {
     private boolean running = false;
     private final Thread acceptThread;
 
+    // 当前活跃长连接的输出通道（连上就设置，断开才清空）。
+    // 回执统一写这里，保证多条 SET 共用同一条长连接，不绑死匿名内部类的 out。
+    private OutputStreamWriter activeOut = null;
+
     private SocketServer() {
         acceptThread = new Thread(new AcceptRunnable(), "PresetSocketAccept");
         acceptThread.setDaemon(true);
@@ -117,44 +121,54 @@ public final class SocketServer {
 
         @Override
         public void run() {
-            try (BufferedReader in = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-                 OutputStreamWriter out = new OutputStreamWriter(
-                    socket.getOutputStream(), StandardCharsets.UTF_8)) {
+            try {
+                BufferedReader in = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                OutputStreamWriter out = new OutputStreamWriter(
+                        socket.getOutputStream(), StandardCharsets.UTF_8);
+                // 连接建立即登记为当前活跃长连接通道，回执统一走这里
+                activeOut = out;
+                // 把回执通道接到这条长连接上，输入法侧的 OK/完成/失败 发回本机
+                PresetEngine.get().setReplyListener(
+                        new PresetEngine.OnReplyListener() {
+                            @Override
+                            public void onReply(final String replyLine) {
+                                logEvent("回执 -> 本机: " + replyLine);
+                                OutputStreamWriter w = activeOut;
+                                if (w == null) return;
+                                try {
+                                    w.write(replyLine + "\n");
+                                    w.flush();
+                                } catch (IOException e) {
+                                    Log.e(TAG, "回执发送失败: " + e.getMessage());
+                                    logEvent("回执发送失败: " + e.getMessage());
+                                }
+                            }
+                        });
 
                 String line;
+                // 长连接：连上就不断开，循环接收 SET，直到流结束（对端真断开）才退出
                 while ((line = in.readLine()) != null) {
                     final String trimmed = line.trim();
                     if (trimmed.isEmpty()) continue;
                     if (trimmed.startsWith("SET:")) {
                         final String content = trimmed.substring(4);
                         logEvent("收到 SET，预输入内容=[" + content + "]");
-                        // 把回执通道接到这条连接上，输入法侧的 OK/完成/失败 发回本机
-                        PresetEngine.get().setReplyListener(
-                                new PresetEngine.OnReplyListener() {
-                                    @Override
-                                    public void onReply(final String replyLine) {
-                                        logEvent("回执 -> 本机: " + replyLine);
-                                        try {
-                                            out.write(replyLine + "\n");
-                                            out.flush();
-                                        } catch (IOException e) {
-                                            Log.e(TAG, "回执发送失败: " + e.getMessage());
-                                            logEvent("回执发送失败: " + e.getMessage());
-                                        }
-                                    }
-                                });
                         PresetEngine.get().setContent(content);
                     }
                     // 其它指令可在此扩展
                 }
             } catch (IOException e) {
                 Log.e(TAG, "客户端连接处理出错: " + e.getMessage());
+                logEvent("客户端连接断开: " + e.getMessage());
             } finally {
-                try {
-                    socket.close();
-                } catch (IOException ignored) {
+                // 仅当这条就是当前活跃连接时才清空，绝不在正常流程中主动关闭 socket
+                if (activeOut != null) {
+                    try { activeOut.flush(); } catch (IOException ignored) {}
+                    activeOut = null;
                 }
+                PresetEngine.get().setReplyListener(null);
+                // 注意：不调用 socket.close()，由进程退出或 accept 循环停止时统一回收
             }
         }
     }

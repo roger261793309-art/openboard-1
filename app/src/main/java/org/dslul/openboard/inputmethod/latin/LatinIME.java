@@ -885,20 +885,21 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // 覆盖层高度对齐 mSingleFrame 自身真实高度（即窗口真实键盘高度）。
         final LayoutInflater inflater = getLayoutInflater();
         mSingleFrame = new FrameLayout(this);
-        // 宽度撑满；高度先 WRAP_CONTENT，让窗口以覆盖层内容为准测量，
-        // 真正高度由下面监听里抄 mSingleFrame 实测高度钉死（避免 MATCH_PARENT 在
-        // WRAP_CONTENT 窗口里形成循环依赖塌 0）。
+        // 宽度撑满；高度用 MATCH_PARENT，浮层恒定占满系统算出的键盘窗口高度
+        // （系统按机型/系统/缩放/分辨率自己算高，浮层直接套用，不随文字内容变高变矮）。
+        // 真正钉死的高度由下面监听里把 mSingleFrame 实测窗口高赋给自身和覆盖层完成。
         mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         // 单键覆盖层作为唯一内容
         mSingleKeyContainer = inflater.inflate(
                 R.layout.single_key_view, mSingleFrame, false);
         mSingleKeyText = mSingleKeyContainer.findViewById(R.id.single_key_text);
         // 兜底：低版本（API<26）XML 的 autoSizeTextType 会被忽略，
-        // 用 AppCompat 的代码 API 开启多行 uniform 自适应（12~64sp），
-        // 文字在键盘宽高框内自动换行并选最大可用字号，绝不超出软键盘范围。
+        // 用 AppCompat 的代码 API 开启多行 uniform 自适应（12~14sp），
+        // 文字在键盘宽高框内自动换行并选最大可用字号（上限约 PC 10~11号），
+        // 字少不放大填满、字多换行不限制行数，绝不超出软键盘范围。
         mSingleKeyText.setAutoSizeTextTypeUniformWithConfiguration(
-                12, 64, 1, TypedValue.COMPLEX_UNIT_SP);
+                12, 14, 1, TypedValue.COMPLEX_UNIT_SP);
         mSingleKeyContainer.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(final View v) {
