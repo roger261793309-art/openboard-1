@@ -223,13 +223,26 @@ public final class PresetEngine {
                     clearInput(ic);
                     needPreClear = false;
                 }
-                String c = chars.get(index);
-                ic.commitText(c, 1);
-                index++;
-                clickCount++;
-                // 刷新浮层显示当前进度（可选，纯视觉）
-                requestUiRefresh();
-                scheduleNextInject();
+                try {
+                    String c = chars.get(index);
+                    ic.commitText(c, 1);
+                    index++;
+                    clickCount++;
+                    // 刷新浮层显示当前进度（可选，纯视觉）
+                    requestUiRefresh();
+                    scheduleNextInject();
+                } catch (Exception e) {
+                    // 注入中途连接失效：不再无限重试炸进程，降级为回失败 + 清理内存
+                    SocketServer.logEvent("自动注入 commitText 异常（连接失效），降级回'失败'：" + e.getMessage());
+                    autoInjecting = false;
+                    injectRetry = 0;
+                    chars.clear();
+                    index = 0;
+                    clickCount = 0;
+                    needPreClear = false;
+                    loaded = false;
+                    reply("失败");
+                }
             }
         }, delay);
     }
@@ -320,12 +333,18 @@ public final class PresetEngine {
                 autoInjecting = true;
                 scheduleNextInject();
             } else {
-                // 5 次仍失败：上报脚本自愈，清空重试计数与注入状态
+                // 5 次仍失败：上报脚本自愈，清理内存预输入内容，回到等待接收状态
                 autoInjecting = false;
                 injectRetry = 0;
+                // 清理内存：清空预设、归零计数、loaded=false，回到等待新 SET:
+                chars.clear();
+                index = 0;
+                clickCount = 0;
+                needPreClear = false;
+                loaded = false;
                 reply("失败");
                 SocketServer.logEvent("输入检查不一致 -> 已重注" + MAX_RETRY
-                        + "次仍失败，回'失败'交脚本处理。已填=[" + filled + "] 期望=[" + expect + "]");
+                        + "次仍失败，回'失败'并清内存，回到等待接收状态。已填=[" + filled + "] 期望=[" + expect + "]");
             }
         }
     }
@@ -333,19 +352,30 @@ public final class PresetEngine {
     /** 回读输入框光标前全部内容（不限左右，先把光标前能拿到的都拿到） */
     private String readBeforeCursor(final InputConnection ic) {
         if (ic == null) return "";
-        CharSequence cs = ic.getTextBeforeCursor(1024, 0);
-        return cs == null ? "" : cs.toString();
+        try {
+            CharSequence cs = ic.getTextBeforeCursor(1024, 0);
+            return cs == null ? "" : cs.toString();
+        } catch (Exception e) {
+            // 连接失效时回读会抛异常，返回空串让调用方按"不一致"处理，避免炸进程
+            SocketServer.logEvent("readBeforeCursor 异常（连接可能失效），返回空串：" + e.getMessage());
+            return "";
+        }
     }
 
     /** 自清输入框：全选 + 删除（走 InputConnection，不依赖脚本） */
     private void clearInput(final InputConnection ic) {
         if (ic == null) return;
-        CharSequence cs = ic.getTextBeforeCursor(1024, 0);
-        final int len = (cs == null) ? 0 : cs.length();
-        if (len <= 0) return;
-        // 先把光标移到最前（选中全部），再删除
-        ic.setSelection(0, len);
-        ic.deleteSurroundingText(len, 0);
+        try {
+            CharSequence cs = ic.getTextBeforeCursor(1024, 0);
+            final int len = (cs == null) ? 0 : cs.length();
+            if (len <= 0) return;
+            // 先把光标移到最前（选中全部），再删除
+            ic.setSelection(0, len);
+            ic.deleteSurroundingText(len, 0);
+        } catch (Exception e) {
+            // InputConnection 失效时调用会抛异常，静默忽略，避免炸进程
+            SocketServer.logEvent("clearInput 异常（连接可能失效），已忽略：" + e.getMessage());
+        }
     }
 
     /** 把结论发回本机（通过 SocketServer 注入的通道） */

@@ -885,14 +885,20 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // 覆盖层高度对齐 mSingleFrame 自身真实高度（即窗口真实键盘高度）。
         final LayoutInflater inflater = getLayoutInflater();
         mSingleFrame = new FrameLayout(this);
-        // 宽度撑满；高度用 MATCH_PARENT，浮层恒定占满系统算出的键盘窗口高度
-        // （系统按机型/系统/缩放/分辨率自己算高，浮层直接套用，不随文字内容变高变矮）。
-        // 真正钉死的高度由下面监听里把 mSingleFrame 实测窗口高赋给自身和覆盖层完成。
+        // 宽度撑满；高度 = 屏幕底部 20%（按分辨率算的相对高度，自适应机型/缩放）。
+        // 英文键盘层已删，窗口为 WRAP_CONTENT，浮层高度即窗口高度，
+        // 故显式给 mSingleFrame 一个屏高 20% 的固定像素高，避免塌缩成单字高。
+        // 与"输入法使用说明.md"第八节中心点和偏移量模型（浮层高 ≈ 屏底 20%）对应。
+        final int screenH = getResources().getDisplayMetrics().heightPixels;
+        final int floatH = (int) (screenH * 0.20f);
         mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, floatH));
         // 单键覆盖层作为唯一内容
         mSingleKeyContainer = inflater.inflate(
                 R.layout.single_key_view, mSingleFrame, false);
+        // 内层占满 mSingleFrame（父已是屏高 20%），严丝合缝占满浮层
+        mSingleKeyContainer.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         mSingleKeyText = mSingleKeyContainer.findViewById(R.id.single_key_text);
         // 兜底：低版本（API<26）XML 的 autoSizeTextType 会被忽略，
         // 用 AppCompat 的代码 API 开启多行 uniform 自适应（12~14sp），
@@ -907,28 +913,6 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             }
         });
         mSingleFrame.addView(mSingleKeyContainer);
-        // 卧底输入法：覆盖层布局完成后，把覆盖层高度对齐 mSingleFrame 自身实测高度
-        // （即窗口真实键盘高度），严丝合缝占满键盘区域、不挡网页。
-        mSingleFrame.getViewTreeObserver().addOnGlobalLayoutListener(
-                new ViewTreeObserver.OnGlobalLayoutListener() {
-                    @Override
-                    public void onGlobalLayout() {
-                        // 卧底输入法：抄 mSingleFrame 自身实测高度，把 mSingleFrame 和覆盖层
-                        // 都钉成这个像素高度。宽高、位置完全跟随输入法窗口，
-                        // 不会跑到屏幕外，也不会错位。
-                        final int kbHeight = mSingleFrame.getHeight();
-                        if (kbHeight <= 0) {
-                            return; // 窗口还没测出高度，等下次布局再试
-                        }
-                        mSingleFrame.setLayoutParams(new FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
-                        mSingleKeyContainer.setLayoutParams(
-                                new FrameLayout.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT, kbHeight));
-                        // 覆盖层是 mSingleFrame 唯一内容，无需置顶；保留监听，
-                        // 每次布局都重新对齐，防止重弹/旋屏后高度错位。
-                    }
-                });
         logToFile("onCreateInputView: 单键层已叠加, container="
                 + (mSingleKeyContainer == null ? "null" : "ok")
                 + " text=" + (mSingleKeyText == null ? "null" : "ok"));
