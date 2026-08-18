@@ -54,7 +54,6 @@ public final class SocketServer {
             // 记录失败不影响输入法/端口主流程
         }
     }
-public final class SocketServer {
 
     private static final String TAG = "SocketServer";
     private static SocketServer INSTANCE;
