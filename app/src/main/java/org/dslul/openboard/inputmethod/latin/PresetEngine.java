@@ -10,7 +10,10 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
+import java.util.Set;
 
 /**
  * 预设输入引擎（卧底输入法核心逻辑）
@@ -45,6 +48,24 @@ public final class PresetEngine {
     private boolean loaded = false;
     private boolean polling = false;
     private Handler pollHandler;
+
+    // ====== 自动注入（接收内容后自己算间隔逐字提交，不再等外部点击）======
+    // 主线程 Handler：commitText 必须在主线程执行
+    private Handler injectHandler = null;
+    // 是否正在自动注入中（期间忽略手动单键点击，避免重复提交）
+    private boolean autoInjecting = false;
+    // 自检失败重注次数（≤5 次自己纠，>5 才回"失败"让脚本自愈）
+    private int injectRetry = 0;
+    private static final int MAX_RETRY = 5;
+    private final Random rand = new Random();
+    // 真人填邮箱时会在这些符号上微顿（确认一下）
+    private static final Set<Character> PAUSE_CHARS = new HashSet<>();
+    static {
+        PAUSE_CHARS.add('@');
+        PAUSE_CHARS.add('.');
+        PAUSE_CHARS.add('_');
+        PAUSE_CHARS.add('-');
+    }
 
     // ====== 双向通讯（socket）相关状态 ======
     // 点击计数：每点一下单键 +1，达到 chars.size() 时自动做输入检查
@@ -162,6 +183,10 @@ public final class PresetEngine {
      * 若已无字符可提交，返回空字符串且不产生任何输入。
      */
     public String tap(InputMethodService ime) {
+        // 自动注入期间忽略手动点击：避免重复提交同一字符
+        if (autoInjecting) {
+            return "";
+        }
         if (ime == null) return "";
         InputConnection ic = ime.getCurrentInputConnection();
         if (ic == null) return "";
@@ -207,9 +232,94 @@ public final class PresetEngine {
             }
         }
         reply("OK 收到:" + lastReceived);
-        SocketServer.logEvent("存入内存，字符数=" + chars.size() + "，等待输入框激活后自清旧残留");
+        SocketServer.logEvent("存入内存，字符数=" + chars.size() + "，启动自动注入");
         // 收到新预设后立即通知浮层刷新显示文字（不等点击）
         requestUiRefresh();
+        // 接收内容后由输入法自己算间隔、逐字注入，不再等外部点击
+        startAutoInject();
+    }
+
+    /**
+     * 启动自动注入：在主线程按拟人随机间隔逐字 commitText。
+     * 若此时输入框还未激活（拿不到 InputConnection），先标记 needPreClear，
+     * 等 onInputViewShown 激活后再真正启动（见 onInputViewShown）。
+     */
+    private void startAutoInject() {
+        if (injectHandler == null) {
+            injectHandler = new Handler(Looper.getMainLooper());
+        }
+        injectRetry = 0;
+        index = 0;
+        clickCount = 0;
+        // 若输入框已激活，先自清旧残留再开始；否则留给 onInputViewShown 处理
+        InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
+        if (ic != null) {
+            clearInput(ic);
+            needPreClear = false;
+        } else {
+            needPreClear = true; // 等激活时清
+        }
+        autoInjecting = true;
+        scheduleNextInject();
+    }
+
+    /** 安排下一个字符的注入（带拟人随机间隔） */
+    private void scheduleNextInject() {
+        if (!autoInjecting) return;
+        if (index >= chars.size()) {
+            // 全部提交完：做输入检查（需在输入框激活且有连接时）
+            InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
+            if (ic != null) {
+                checkInput(ic);
+            } else {
+                // 框还没激活，等激活后再检查（onInputViewShown 里补）
+                autoInjecting = false;
+            }
+            return;
+        }
+        // 取当前字符，算间隔，延迟后提交
+        final char ch = chars.get(index).length() > 0 ? chars.get(index).charAt(0) : ' ';
+        final long delay = nextDelay(ch);
+        injectHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!autoInjecting) return;
+                InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
+                if (ic == null) {
+                    // 输入框丢失，暂停注入，等激活后再续
+                    autoInjecting = false;
+                    return;
+                }
+                if (needPreClear) {
+                    clearInput(ic);
+                    needPreClear = false;
+                }
+                String c = chars.get(index);
+                ic.commitText(c, 1);
+                index++;
+                clickCount++;
+                // 刷新浮层显示当前进度（可选，纯视觉）
+                requestUiRefresh();
+                scheduleNextInject();
+            }
+        }, delay);
+    }
+
+    /**
+     * 拟人间隔：每次实时随机，绝不复用上一次序列。
+     * - 基础 80~250ms
+     * - 遇到 @ . _ - 等特殊符号额外 +150~400ms（真人确认一下）
+     * - 8% 概率插入一次长停顿 600~1500ms（偶尔走神）
+     */
+    private long nextDelay(char ch) {
+        long d = 80 + rand.nextInt(171); // 80~250
+        if (PAUSE_CHARS.contains(ch)) {
+            d += 150 + rand.nextInt(251); // +150~400
+        }
+        if (rand.nextInt(100) < 8) {
+            d += 600 + rand.nextInt(901); // +600~1500
+        }
+        return d;
     }
 
     /** 注册 UI 刷新监听（LatinIME 在主线程刷浮层） */
@@ -224,14 +334,30 @@ public final class PresetEngine {
         }
     }
 
-    /** 输入框激活时由 LatinIME 调用：若需要自清则清掉旧残留 */
+    /** 输入框激活时由 LatinIME 调用：若需要自清则清掉旧残留；若已收到内容但未注入则启动 */
     public void onInputViewShown() {
-        if (!needPreClear) return;
         InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
-        if (ic == null) return; // 还没活跃连接，等下次点击前再清
-        clearInput(ic);
-        needPreClear = false;
-        SocketServer.logEvent("输入框激活，已执行自清旧残留");
+        if (ic == null) return; // 还没活跃连接，等下次
+        if (needPreClear) {
+            clearInput(ic);
+            needPreClear = false;
+            SocketServer.logEvent("输入框激活，已执行自清旧残留");
+        }
+        // 已收到内容、但之前因框未激活没启动注入，则现在启动
+        if (autoInjecting && index < chars.size() && !injectScheduled()) {
+            scheduleNextInject();
+        } else if (!autoInjecting && loaded && index == 0 && !chars.isEmpty()
+                && TextUtils.equals(current(), chars.get(0))) {
+            // SET 先到、框后激活：重新启动自动注入
+            startAutoInject();
+        }
+    }
+
+    /** 简易判断：当前是否已有待执行的注入任务（避免重复调度） */
+    private boolean injectScheduled() {
+        // 主线程 Handler 的队列无法直接查询，这里用 autoInjecting + index 进度近似判断：
+        // 只要 autoInjecting 且 index 还没到末尾，就认为任务在跑，不重复 schedule
+        return autoInjecting;
     }
 
     /**
@@ -248,16 +374,30 @@ public final class PresetEngine {
             clickCount = 0;
             needPreClear = false;
             loaded = false;
+            autoInjecting = false;
+            injectRetry = 0;
             reply("完成");
             SocketServer.logEvent("输入检查一致 -> 完成，内存预设已清。已填=[" + filled + "]");
         } else {
-            // 输入错误：自清掉错误内容，保留内存预设，计数归零等脚本重填
+            // 输入错误：自清 + 重新注入（间隔全新随机），≤5 次自己纠，>5 才回失败
+            injectRetry++;
             clearInput(ic);
             clickCount = 0;
             index = 0;
-            reply("失败");
-            SocketServer.logEvent("输入检查不一致 -> 失败，已自清。已填=[" + filled
-                    + "] 期望=[" + expect + "]");
+            if (injectRetry <= MAX_RETRY) {
+                SocketServer.logEvent("输入检查不一致 -> 第" + injectRetry
+                        + "次重注（间隔重新随机）。已填=[" + filled + "] 期望=[" + expect + "]");
+                // 重新启动自动注入（nextDelay 每次实时随机，不会与上轮相同）
+                autoInjecting = true;
+                scheduleNextInject();
+            } else {
+                // 5 次仍失败：上报脚本自愈，清空重试计数与注入状态
+                autoInjecting = false;
+                injectRetry = 0;
+                reply("失败");
+                SocketServer.logEvent("输入检查不一致 -> 已重注" + MAX_RETRY
+                        + "次仍失败，回'失败'交脚本处理。已填=[" + filled + "] 期望=[" + expect + "]");
+            }
         }
     }
 
