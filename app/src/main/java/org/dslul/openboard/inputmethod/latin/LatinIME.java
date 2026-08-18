@@ -30,7 +30,9 @@ import android.inputmethodservice.InputMethodService;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Debug;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.text.InputType;
@@ -700,7 +702,7 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         PresetEngine.get().setUiRefreshListener(new PresetEngine.OnUiRefreshListener() {
             @Override
             public void onUiRefresh() {
-                runOnUiThread(new Runnable() {
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
                         refreshSingleKey();
