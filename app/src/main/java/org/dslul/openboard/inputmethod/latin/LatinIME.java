@@ -1444,9 +1444,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // See {@link InputMethodService#setinputView(View)} and
         // {@link SoftInputWindow#updateWidthHeight(WindowManager.LayoutParams)}.
         final Window window = getWindow().getWindow();
-        // 卧底输入法：窗口高度改为 WRAP_CONTENT，包住键盘实测高度（由 onCreateInputView 的监听填入），
-        // 不再铺满整屏，避免浅灰背景盖住网页上部。
-        ViewLayoutUtils.updateLayoutHeightOf(window, LayoutParams.WRAP_CONTENT);
+        // 卧底输入法：窗口高度锁死为屏幕分辨率高度的底部 20%（固定像素），
+        // 不随浮层内部文字自适应变化而撑大/塌缩；浮层容器 mSingleFrame 同步为屏高 20%。
+        final int screenH = getResources().getDisplayMetrics().heightPixels;
+        final int floatH = (int) (screenH * 0.20f);
+        ViewLayoutUtils.updateLayoutHeightOf(window, floatH);
         // This method may be called before {@link #setInputView(View)}.
         if (mInputView != null) {
             // In non-fullscreen mode, {@link InputView} and its parent inputArea should expand to
