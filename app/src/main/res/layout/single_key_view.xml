@@ -16,9 +16,13 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:textSize="48sp"
         android:textColor="#21272B"
         android:background="@color/key_background_lxx_light"
+        android:ellipsize="none"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="12sp"
+        android:autoSizeMaxTextSize="64sp"
+        android:autoSizeStepGranularity="1sp"
         android:text="" />
 
 </FrameLayout>

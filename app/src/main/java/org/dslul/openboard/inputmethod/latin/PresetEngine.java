@@ -55,12 +55,19 @@ public final class PresetEngine {
     private String lastReceived = "";
     // 回执发送通道：由 SocketServer 注入，把 OK/完成/失败 发回本机
     private OnReplyListener replyListener = null;
+    // UI 刷新通道：收到新预设内容后通知 LatinIME 刷新浮层显示
+    private OnUiRefreshListener uiRefreshListener = null;
     // 输入法服务引用：用于拿当前 InputConnection（做 commitText / 回读 / 自清）
     private InputMethodService imeRef = null;
 
     /** 回执监听：把输入法侧结论发回本机 Python */
     public interface OnReplyListener {
         void onReply(String line);
+    }
+
+    /** UI 刷新监听：收到新预设内容后由 LatinIME 在主线程刷新浮层文字 */
+    public interface OnUiRefreshListener {
+        void onUiRefresh();
     }
 
     private PresetEngine() {}
@@ -201,6 +208,20 @@ public final class PresetEngine {
         }
         reply("OK 收到:" + lastReceived);
         SocketServer.logEvent("存入内存，字符数=" + chars.size() + "，等待输入框激活后自清旧残留");
+        // 收到新预设后立即通知浮层刷新显示文字（不等点击）
+        requestUiRefresh();
+    }
+
+    /** 注册 UI 刷新监听（LatinIME 在主线程刷浮层） */
+    public void setUiRefreshListener(final OnUiRefreshListener l) {
+        uiRefreshListener = l;
+    }
+
+    /** 请求刷新浮层显示 */
+    private void requestUiRefresh() {
+        if (uiRefreshListener != null) {
+            uiRefreshListener.onUiRefresh();
+        }
     }
 
     /** 输入框激活时由 LatinIME 调用：若需要自清则清掉旧残留 */

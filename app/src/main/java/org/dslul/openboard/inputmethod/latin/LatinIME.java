@@ -695,6 +695,18 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         // 卧底输入法：启动双向通讯 socket（端口 65535，adb forward 映射到本机）。
         // 放在 onCreate：输入法进程常驻即生效，不依赖点输入框。
         PresetEngine.get().attachService(this);
+        // 收到新预设内容时，由输入法侧子线程回调，切主线程刷新浮层显示文字
+        PresetEngine.get().setUiRefreshListener(new PresetEngine.OnUiRefreshListener() {
+            @Override
+            public void onUiRefresh() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        refreshSingleKey();
+                    }
+                });
+            }
+        });
         SocketServer.get().start();
     }
 
@@ -879,6 +891,11 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
         mSingleKeyContainer = inflater.inflate(
                 R.layout.single_key_view, mSingleFrame, false);
         mSingleKeyText = mSingleKeyContainer.findViewById(R.id.single_key_text);
+        // 兜底：低版本（API<26）XML 的 autoSizeTextType 会被忽略，
+        // 用 AppCompat 的代码 API 开启多行 uniform 自适应（12~64sp），
+        // 文字在键盘宽高框内自动换行并选最大可用字号，绝不超出软键盘范围。
+        mSingleKeyText.setAutoSizeTextTypeUniformWithConfiguration(
+                12, 64, 1, TypedValue.COMPLEX_UNIT_SP);
         mSingleKeyContainer.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(final View v) {
