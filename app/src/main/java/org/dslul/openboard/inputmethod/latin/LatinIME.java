@@ -711,8 +711,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             }
         });
         SocketServer.get().start();
-        // 顶层悬浮日志窗：随输入法常驻，全量打印、可拖动、可复制
-        ImeLogWindow.get().show(this);
+        SocketServer.logEvent("[系统] LatinIME.onCreate 启动，输入法进程已起");
+        Log.i("PresetIME", "[系统] LatinIME.onCreate 启动，PID=" + android.os.Process.myPid());
     }
 
     // Has to be package-visible for unit tests
@@ -814,6 +814,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
 
     @Override
     public void onDestroy() {
+        SocketServer.logEvent("[系统] LatinIME.onDestroy 被调用，输入法进程即将结束");
+        Log.w("PresetIME", "[系统] LatinIME.onDestroy 被调用，PID=" + android.os.Process.myPid());
         mClipboardHistoryManager.onDestroy();
         mDictionaryFacilitator.closeDictionaries();
         mSettings.onDestroy();
@@ -1221,6 +1223,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
     }
 
     void onFinishInputViewInternal(final boolean finishingInput) {
+        SocketServer.logEvent("[系统] LatinIME.onFinishInputView finishing=" + finishingInput);
+        Log.i("PresetIME", "[系统] onFinishInputView finishing=" + finishingInput);
         super.onFinishInputView(finishingInput);
         cleanupInternalStateForFinishInput();
     }

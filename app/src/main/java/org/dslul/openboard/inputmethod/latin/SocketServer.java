@@ -34,9 +34,9 @@ import java.util.Locale;
  */
 public final class SocketServer {
 
-    /** 端口流程输入记录文件（应用私有目录，自带写权限，不依赖 WRITE_EXTERNAL_STORAGE） */
+    /** 端口流程输入记录文件（应用内部存储，进程必可写；原 sdcard/Android/data 路径在云机建不出来） */
     private static final String IME_LOG_PATH =
-            "/sdcard/Android/data/org.dslul.openboard.inputmethod.latin/files/ime_socket_log.txt";
+            "/data/data/org.dslul.openboard.inputmethod.latin/files/ime_socket_log.txt";
 
     /** 追加一条带时间戳的记录到输入记录文件（失败静默，绝不影响主流程） */
     public static void logEvent(final String msg) {
@@ -50,8 +50,6 @@ public final class SocketServer {
             try (FileWriter fw = new FileWriter(f, true)) {
                 fw.write("[" + ts + "] " + msg + "\n");
             }
-            // 全量同步到顶层悬浮窗（常驻/可复制）
-            ImeLogWindow.get().append("[" + ts + "] " + msg);
         } catch (IOException ignored) {
             // 记录失败不影响输入法/端口主流程
         }

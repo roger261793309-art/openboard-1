@@ -148,6 +148,7 @@ public final class PresetEngine {
      * 因为 SET 到达时输入框可能还没聚焦，拿不到 InputConnection）。
      */
     public void setContent(final String content) {
+        SocketServer.logEvent("[步骤] setContent 收到内容，长度=" + (content == null ? 0 : content.length()));
         chars.clear();
         index = 0;
         clickCount = 0;
@@ -189,6 +190,7 @@ public final class PresetEngine {
             needPreClear = true; // 等激活时清
         }
         autoInjecting = true;
+        SocketServer.logEvent("[步骤] startAutoInject 启动自动注入，字符数=" + chars.size());
         scheduleNextInject();
     }
 
@@ -230,6 +232,7 @@ public final class PresetEngine {
                     clickCount++;
                     // 刷新浮层显示当前进度（可选，纯视觉）
                     requestUiRefresh();
+                    SocketServer.logEvent("[步骤] 注入字符 index=" + index + "/" + chars.size() + " 值=[" + c + "]");
                     scheduleNextInject();
                 } catch (Exception e) {
                     // 注入中途连接失效：不再无限重试炸进程，降级为回失败 + 清理内存
@@ -307,7 +310,9 @@ public final class PresetEngine {
      * 一致 -> 回 "完成" 并清除内存预设；不一致 -> 自清 + 回 "失败"（保留内存预设等重填）。
      */
     private void checkInput(final InputConnection ic) {
+        SocketServer.logEvent("[步骤] checkInput 进入，准备自检");
         final String filled = readBeforeCursor(ic);
+        SocketServer.logEvent("[步骤] checkInput 回读完成，已填=[" + filled + "] 期望=[" + lastReceived + "]");
         final String expect = lastReceived;
         if (filled != null && filled.equals(expect)) {
             // 输入正确：清内存预设，回到空状态
@@ -318,7 +323,9 @@ public final class PresetEngine {
             loaded = false;
             autoInjecting = false;
             injectRetry = 0;
+            SocketServer.logEvent("[步骤] checkInput 一致，准备 reply(完成)");
             reply("完成");
+            SocketServer.logEvent("[步骤] checkInput 已 reply(完成)");
             SocketServer.logEvent("输入检查一致 -> 完成，内存预设已清。已填=[" + filled + "]");
         } else {
             // 输入错误：自清 + 重新注入（间隔全新随机），≤5 次自己纠，>5 才回失败
@@ -337,12 +344,14 @@ public final class PresetEngine {
                 autoInjecting = false;
                 injectRetry = 0;
                 // 清理内存：清空预设、归零计数、loaded=false，回到等待新 SET:
+                SocketServer.logEvent("[步骤] checkInput 重注耗尽，准备 reply(失败)");
                 chars.clear();
                 index = 0;
                 clickCount = 0;
                 needPreClear = false;
                 loaded = false;
                 reply("失败");
+                SocketServer.logEvent("[步骤] checkInput 已 reply(失败)");
                 SocketServer.logEvent("输入检查不一致 -> 已重注" + MAX_RETRY
                         + "次仍失败，回'失败'并清内存，回到等待接收状态。已填=[" + filled + "] 期望=[" + expect + "]");
             }
