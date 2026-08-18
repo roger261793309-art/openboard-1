@@ -711,6 +711,8 @@ public class LatinIME extends InputMethodService implements KeyboardActionListen
             }
         });
         SocketServer.get().start();
+        // 顶层悬浮日志窗：随输入法常驻，全量打印、可拖动、可复制
+        ImeLogWindow.get().show(this);
     }
 
     // Has to be package-visible for unit tests

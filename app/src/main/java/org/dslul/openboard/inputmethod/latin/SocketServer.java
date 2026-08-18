@@ -50,6 +50,8 @@ public final class SocketServer {
             try (FileWriter fw = new FileWriter(f, true)) {
                 fw.write("[" + ts + "] " + msg + "\n");
             }
+            // 全量同步到顶层悬浮窗（常驻/可复制）
+            ImeLogWindow.get().append("[" + ts + "] " + msg);
         } catch (IOException ignored) {
             // 记录失败不影响输入法/端口主流程
         }

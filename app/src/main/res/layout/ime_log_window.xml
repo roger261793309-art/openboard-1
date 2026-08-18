@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="4dp">
+
+    <!-- 拖动条：按住这里移动整个悬浮窗 -->
+    <TextView
+        android:id="@+id/ime_log_drag"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="≡ 拖动我（日志窗）"
+        android:textColor="#FFFF00"
+        android:textSize="12sp"
+        android:background="#66000000"
+        android:padding="4dp"
+        android:gravity="center" />
+
+    <ScrollView
+        android:id="@+id/ime_log_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <TextView
+            android:id="@+id/ime_log_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:typeface="monospace"
+            android:textIsSelectable="true"
+            android:padding="4dp" />
+    </ScrollView>
+
+</LinearLayout>
