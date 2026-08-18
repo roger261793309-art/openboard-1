@@ -21,6 +21,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WRITE_USER_DICTIONARY" />
+    <!-- 双向通讯：ServerSocket 绑定本地端口需要 INTERNET 权限（adb reverse 不免除进程侧权限） -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- A signature-protected permission to ask AOSP Keyboard to close the software keyboard.
          To use this, add the following line into calling application's AndroidManifest.xml

@@ -200,6 +200,7 @@ public final class PresetEngine {
             }
         }
         reply("OK 收到:" + lastReceived);
+        SocketServer.logEvent("存入内存，字符数=" + chars.size() + "，等待输入框激活后自清旧残留");
     }
 
     /** 输入框激活时由 LatinIME 调用：若需要自清则清掉旧残留 */
@@ -209,6 +210,7 @@ public final class PresetEngine {
         if (ic == null) return; // 还没活跃连接，等下次点击前再清
         clearInput(ic);
         needPreClear = false;
+        SocketServer.logEvent("输入框激活，已执行自清旧残留");
     }
 
     /**
@@ -226,12 +228,15 @@ public final class PresetEngine {
             needPreClear = false;
             loaded = false;
             reply("完成");
+            SocketServer.logEvent("输入检查一致 -> 完成，内存预设已清。已填=[" + filled + "]");
         } else {
             // 输入错误：自清掉错误内容，保留内存预设，计数归零等脚本重填
             clearInput(ic);
             clickCount = 0;
             index = 0;
             reply("失败");
+            SocketServer.logEvent("输入检查不一致 -> 失败，已自清。已填=[" + filled
+                    + "] 期望=[" + expect + "]");
         }
     }
 
