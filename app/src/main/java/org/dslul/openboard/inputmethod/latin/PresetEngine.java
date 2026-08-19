@@ -266,6 +266,9 @@ public final class PresetEngine {
                 try {
                     String c = chars.get(index);
                     ic.commitText(c, 1);
+                    // 立即结束组合态：告诉浏览器"这个字已确认上屏"，避免连续 commitText
+                    // 被 Chromium 当成拼音/选词组合输入，导致下一个字符全选替换吞字
+                    ic.finishComposingText();
                     index++;
                     clickCount++;
                     // 刷新浮层显示当前进度（可选，纯视觉）
