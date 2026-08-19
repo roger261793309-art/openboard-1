@@ -31,6 +31,8 @@ public final class PresetEngine {
 
     // 双向通讯端口（adb forward 映射到本机 65535）
     static final int SOCKET_PORT = 65535;
+    // 注入前清框后的缓冲时间（毫秒）：让删除生效、输入框稳定，再打第一个字
+    private static final long PRE_CLEAR_BUFFER_MS = 300;
 
     private final List<String> chars = new ArrayList<>();
     private int index = 0;
@@ -144,15 +146,18 @@ public final class PresetEngine {
 
     /**
      * 通过 socket 接收预输入内容（替代读文件）。
-     * 存内存、重置计数，并立即回 "OK 收到:内容"（自清推迟到输入框激活时做，
-     * 因为 SET 到达时输入框可能还没聚焦，拿不到 InputConnection）。
+     * 存内存、重置计数，并立即回 "OK 收到:内容"。
+     * 收到内容后主动检查输入框是否激活：
+     *   - 已激活：直接开始自动注入（注入前清一次旧残留 + 缓冲）。
+     *   - 未激活：等待 3 秒再次检查；仍不激活则回 "输入框未激活" 并结束本次，
+     *     不再依赖系统 onInputViewShown 回调兜底启动。
      */
     public void setContent(final String content) {
         SocketServer.logEvent("[步骤] setContent 收到内容，长度=" + (content == null ? 0 : content.length()));
         chars.clear();
         index = 0;
         clickCount = 0;
-        needPreClear = true; // 等输入框激活时自清旧残留
+        needPreClear = true; // 收到内容即记一笔：注入前需清旧残留
         lastReceived = content == null ? "" : content;
         loaded = true;
         if (!TextUtils.isEmpty(lastReceived)) {
@@ -162,17 +167,49 @@ public final class PresetEngine {
             }
         }
         reply("OK 收到:" + lastReceived);
-        SocketServer.logEvent("存入内存，字符数=" + chars.size() + "，启动自动注入");
+        SocketServer.logEvent("存入内存，字符数=" + chars.size() + "，检查输入框激活状态");
         // 收到新预设后立即通知浮层刷新显示文字（不等点击）
         requestUiRefresh();
         // 接收内容后由输入法自己算间隔、逐字注入，不再等外部点击
-        startAutoInject();
+        checkAndStartInject();
+    }
+
+    /**
+     * 收到内容后主动检查激活状态并启动注入（不依赖 onInputViewShown 回调）。
+     * 必须在非主线程调用（内部可能 Thread.sleep）。
+     */
+    private void checkAndStartInject() {
+        InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
+        if (ic != null) {
+            // 第一次查就已激活：直接开始
+            startAutoInject();
+            return;
+        }
+        // 未激活：等待 3 秒后再次检查
+        SocketServer.logEvent("[步骤] 输入框未激活，等待 3 秒后复查");
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            // 被打断则放弃本次注入
+            Thread.currentThread().interrupt();
+            reply("输入框未激活");
+            return;
+        }
+        ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
+        if (ic != null) {
+            // 3 秒后已激活：开始注入
+            startAutoInject();
+        } else {
+            // 仍不激活：回 "输入框未激活" 结束本次
+            SocketServer.logEvent("[步骤] 等待 3 秒后仍无激活，回 输入框未激活");
+            reply("输入框未激活");
+        }
     }
 
     /**
      * 启动自动注入：在主线程按拟人随机间隔逐字 commitText。
-     * 若此时输入框还未激活（拿不到 InputConnection），先标记 needPreClear，
-     * 等 onInputViewShown 激活后再真正启动（见 onInputViewShown）。
+     * 调用前请确保输入框已激活（由 checkAndStartInject 保证）。
+     * 注入前清一次旧残留，清完缓冲 300ms 再打第一个字。
      */
     private void startAutoInject() {
         if (injectHandler == null) {
@@ -181,17 +218,22 @@ public final class PresetEngine {
         injectRetry = 0;
         index = 0;
         clickCount = 0;
-        // 若输入框已激活，先自清旧残留再开始；否则留给 onInputViewShown 处理
+        // 注入前清一次旧残留（只此一处，且只一次）
         InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
         if (ic != null) {
             clearInput(ic);
             needPreClear = false;
-        } else {
-            needPreClear = true; // 等激活时清
         }
         autoInjecting = true;
         SocketServer.logEvent("[步骤] startAutoInject 启动自动注入，字符数=" + chars.size());
-        scheduleNextInject();
+        // 清完缓冲 300ms，让删除生效、输入框稳定，再打第一个字
+        injectHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!autoInjecting) return;
+                scheduleNextInject();
+            }
+        }, PRE_CLEAR_BUFFER_MS);
     }
 
     /** 安排下一个字符的注入（带拟人随机间隔） */
@@ -220,10 +262,6 @@ public final class PresetEngine {
                     // 输入框丢失，暂停注入，等激活后再续
                     autoInjecting = false;
                     return;
-                }
-                if (needPreClear) {
-                    clearInput(ic);
-                    needPreClear = false;
                 }
                 try {
                     String c = chars.get(index);
@@ -290,23 +328,14 @@ public final class PresetEngine {
         }
     }
 
-    /** 输入框激活时由 LatinIME 调用：若需要自清则清掉旧残留；若已收到内容但未注入则启动 */
+    /**
+     * 输入框激活时由 LatinIME 调用。
+     * 注：自清旧残留与启动注入已改由 setContent -> checkAndStartInject 主动负责
+     * （未激活等 3 秒再查、仍不激活回"输入框未激活"），不再依赖此回调兜底，
+     * 故此处不再清框、不再启动注入，避免重复清框导致吞字。
+     */
     public void onInputViewShown() {
-        InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
-        if (ic == null) return; // 还没活跃连接，等下次
-        if (needPreClear) {
-            clearInput(ic);
-            needPreClear = false;
-            SocketServer.logEvent("输入框激活，已执行自清旧残留");
-        }
-        // 已收到内容、但之前因框未激活没启动注入，则现在启动
-        if (autoInjecting && index < chars.size() && !injectScheduled()) {
-            scheduleNextInject();
-        } else if (!autoInjecting && loaded && index == 0 && !chars.isEmpty()
-                && TextUtils.equals(current(), chars.get(0))) {
-            // SET 先到、框后激活：重新启动自动注入
-            startAutoInject();
-        }
+        // 保留空壳：LatinIME 仍会调用，但不再在此处理清框/启动
     }
 
     /** 简易判断：当前是否已有待执行的注入任务（避免重复调度） */
@@ -388,6 +417,7 @@ public final class PresetEngine {
         try {
             CharSequence cs = ic.getTextBeforeCursor(1024, 0);
             final int len = (cs == null) ? 0 : cs.length();
+            SocketServer.logEvent("clearInput 执行 len=" + len);
             if (len <= 0) return;
             // 先把光标移到最前（选中全部），再删除
             ic.setSelection(0, len);
