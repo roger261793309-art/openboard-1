@@ -154,6 +154,12 @@ public final class PresetEngine {
      *     不再依赖系统 onInputViewShown 回调兜底启动。
      */
     public void setContent(final String content) {
+        // 按键指令（备用功能）：KEY:ENTER / KEY:DEL / KEY:DPAD_RIGHT 等
+        // 走 sendKeyCommand 直接发原生按键，不走文本注入。
+        if (content != null && content.startsWith("KEY:")) {
+            sendKeyCommand(content.substring(4));
+            return;
+        }
         SocketServer.logEvent("[步骤] setContent 收到内容，长度=" + (content == null ? 0 : content.length()));
         chars.clear();
         index = 0;
@@ -173,6 +179,47 @@ public final class PresetEngine {
         requestUiRefresh();
         // 接收内容后由输入法自己算间隔、逐字注入，不再等外部点击
         checkAndStartInject();
+    }
+
+    /** 按键指令：映射常用按键名 → 原生 keyCode，发 DOWN+UP，回 "完成"（未知按键回 "失败"）。 */
+    private void sendKeyCommand(final String name) {
+        int keyCode = keyCodeOf(name);
+        if (keyCode < 0) {
+            SocketServer.logEvent("[按键] 未知按键名: " + name);
+            reply("失败:未知按键:" + name);
+            return;
+        }
+        SocketServer.logEvent("[按键] 发送 " + name + " (keyCode=" + keyCode + ")");
+        InputConnection ic = (imeRef != null) ? imeRef.getCurrentInputConnection() : null;
+        if (ic == null) {
+            SocketServer.logEvent("[按键] 输入框未激活，回 输入框未激活");
+            reply("输入框未激活");
+            return;
+        }
+        ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+        ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode));
+        ic.finishComposingText();
+        reply("完成");
+        SocketServer.logEvent("[按键] " + name + " 已发送");
+    }
+
+    /** 常用按键名 → keyCode 映射；未识别返回 -1。 */
+    private int keyCodeOf(final String name) {
+        String k = name == null ? "" : name.trim().toUpperCase();
+        switch (k) {
+            case "ENTER":    return KeyEvent.KEYCODE_ENTER;
+            case "DEL":      return KeyEvent.KEYCODE_DEL;
+            case "BACKSPACE":return KeyEvent.KEYCODE_DEL;
+            case "DPAD_LEFT":return KeyEvent.KEYCODE_DPAD_LEFT;
+            case "DPAD_RIGHT":return KeyEvent.KEYCODE_DPAD_RIGHT;
+            case "DPAD_UP":  return KeyEvent.KEYCODE_DPAD_UP;
+            case "DPAD_DOWN":return KeyEvent.KEYCODE_DPAD_DOWN;
+            case "ESCAPE":   return KeyEvent.KEYCODE_ESCAPE;
+            case "TAB":      return KeyEvent.KEYCODE_TAB;
+            case "HOME":     return KeyEvent.KEYCODE_MOVE_HOME;
+            case "END":      return KeyEvent.KEYCODE_MOVE_END;
+            default:         return -1;
+        }
     }
 
     /**
