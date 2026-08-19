@@ -163,11 +163,12 @@ public class SettingsValues {
         mUseDoubleSpacePeriod = prefs.getBoolean(Settings.PREF_KEY_USE_DOUBLE_SPACE_PERIOD, true)
                 && inputAttributes.mIsGeneralTextInput;
         mBlockPotentiallyOffensive = Settings.readBlockPotentiallyOffensive(prefs, res);
-        mAutoCorrectEnabled = Settings.readAutoCorrectEnabled(prefs, res);
-        mAutoCorrectionThreshold = mAutoCorrectEnabled
-                ? readAutoCorrectionThreshold(res, prefs)
-                : AUTO_CORRECTION_DISABLED_THRESHOLD;
-        mBigramPredictionEnabled = readBigramPredictionEnabled(prefs, res);
+        // 卧底输入法：只做自动注入，不需要原版的智能类功能。
+        // 强制关闭自动纠错/词预测/建议，避免注入 commitText 后被 OpenBoard 的
+        // 英文建议引擎干扰（英文内容前段丢失、日文正常）。魔改版永远禁用。
+        mAutoCorrectEnabled = false;
+        mAutoCorrectionThreshold = AUTO_CORRECTION_DISABLED_THRESHOLD;
+        mBigramPredictionEnabled = false;
         mDoubleSpacePeriodTimeout = res.getInteger(R.integer.config_double_space_period_timeout);
         mHasHardwareKeyboard = Settings.readHasHardwareKeyboard(res.getConfiguration());
         mEnableMetricsLogging = prefs.getBoolean(Settings.PREF_ENABLE_METRICS_LOGGING, true);
@@ -192,10 +193,10 @@ public class SettingsValues {
                 null /* default */);
         mGestureFloatingPreviewTextEnabled = !mInputAttributes.mDisableGestureFloatingPreviewText
                 && prefs.getBoolean(Settings.PREF_GESTURE_FLOATING_PREVIEW_TEXT, true);
-        mAutoCorrectionEnabledPerUserSettings = mAutoCorrectEnabled;
-                //&& !mInputAttributes.mInputTypeNoAutoCorrect;
-        mSuggestionsEnabledPerUserSettings = !mInputAttributes.mIsPasswordField &&
-                readSuggestionsEnabled(prefs);
+        // 卧底输入法：强制关闭自动纠错与建议，使 needsToLookupSuggestions() 恒为 false，
+        // 建议/预测引擎彻底不启动，避免干扰自动注入。
+        mAutoCorrectionEnabledPerUserSettings = false;
+        mSuggestionsEnabledPerUserSettings = false;
         mIncognitoModeEnabled = Settings.readAlwaysIncognitoMode(prefs) || mInputAttributes.mNoLearning
                 || mInputAttributes.mIsPasswordField;
         mIsInternal = Settings.isInternal(prefs);
