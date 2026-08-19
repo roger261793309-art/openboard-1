@@ -4,6 +4,7 @@ import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.inputmethod.InputConnection;
 
 import java.util.ArrayList;
@@ -414,20 +415,58 @@ public final class PresetEngine {
         }
     }
 
-    /** 自清输入框：全选 + 删除（走 InputConnection，不依赖脚本） */
+    /**
+     * 自清输入框（拟人）：以光标为锚点检查左右字符数，用原生退格/方向键逐键清空。
+     *   ① 左右都空 → 跳过
+     *   ② 左有右空 → 退格 左N+6 次
+     *   ③ 左空右有 → 方向键右 右N+6 次 → 退格 右N+6 次
+     *   ④ 左有右有 → 方向键右 右N+6 次 → 退格 总N+6 次
+     * 每次按键后 finishComposingText()（防 Chromium 组合态残留，与吞字修复同思路）。
+     */
     private void clearInput(final InputConnection ic) {
         if (ic == null) return;
         try {
-            CharSequence cs = ic.getTextBeforeCursor(1024, 0);
-            final int len = (cs == null) ? 0 : cs.length();
-            SocketServer.logEvent("clearInput 执行 len=" + len);
-            if (len <= 0) return;
-            // 先把光标移到最前（选中全部），再删除
-            ic.setSelection(0, len);
-            ic.deleteSurroundingText(len, 0);
+            CharSequence before = ic.getTextBeforeCursor(1024, 0);
+            CharSequence after = ic.getTextAfterCursor(1024, 0);
+            int left = (before == null) ? 0 : before.length();
+            int right = (after == null) ? 0 : after.length();
+            int total = left + right;
+            SocketServer.logEvent("clearInput 检查 左=" + left + " 右=" + right);
+            if (total <= 0) return;
+
+            final int EXTRA = 6;  // 富余量：多按几下确保删干净（删空后再按无反应，无害）
+
+            // 右边有内容：先把光标移到最右（原生方向键右，N+6 富余）
+            if (right > 0) {
+                SocketServer.logEvent("clearInput 方向键右 " + (right + EXTRA) + " 次");
+                sendKeyRepeat(ic, KeyEvent.KEYCODE_DPAD_RIGHT, right + EXTRA);
+            }
+            // 从末尾开始逐键退格删除全部（总 N+6 富余）
+            SocketServer.logEvent("clearInput 退格 " + (total + EXTRA) + " 次");
+            sendKeyRepeat(ic, KeyEvent.KEYCODE_DEL, total + EXTRA);
+            ic.finishComposingText();
         } catch (Exception e) {
             // InputConnection 失效时调用会抛异常，静默忽略，避免炸进程
             SocketServer.logEvent("clearInput 抛异常 原文=[" + e + "] 来源=[" + (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "无栈") + "]");
+        }
+    }
+
+    /** 连续发送某个按键 N 次（模拟连按）：每次 DOWN+UP + finishComposingText，键间随机 30~80ms。 */
+    private void sendKeyRepeat(InputConnection ic, int keyCode, int count) {
+        for (int i = 0; i < count; i++) {
+            long t0 = System.currentTimeMillis();
+            ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+            ic.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode));
+            ic.finishComposingText();
+            // 键间随机间隔 30~80ms（比输入 80~250ms 快，符合"连按"节奏）
+            long wait = 30 + rand.nextInt(51);
+            while (System.currentTimeMillis() - t0 < wait) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException ie) {
+                    break;
+                }
+            }
         }
     }
 
